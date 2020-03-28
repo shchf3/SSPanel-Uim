@@ -4,6 +4,8 @@ namespace App\Services\Mail;
 
 use App\Services\Config;
 use Mailgun\Mailgun as MailgunService;
+use Mailgun\HttpClientConfigurator;
+use Http\Adapter\Guzzle6\Client as GuzzleAdapter;
 
 class Mailgun extends Base
 {
@@ -11,11 +13,22 @@ class Mailgun extends Base
     private $mg;
     private $domain;
     private $sender;
+    private $client_config;
 
     public function __construct()
     {
         $this->config = $this->getConfig();
-        $this->mg = MailgunService::create($this->config['key']);
+
+        $client_config = [
+            'proxy' => '127.0.0.1:1080',
+        ];
+        $adapter = GuzzleAdapter::createWithConfig($client_config);
+        $configurator = new HttpClientConfigurator();
+        $configurator->setApiKey($this->config['key']);
+        $configurator->setEndpoint('https://api.mailgun.net');
+        $configurator->setHttpClient($adapter);
+
+        $this->mg = MailgunService::configure($configurator);
         $this->domain = $this->config['domain'];
         $this->sender = $this->config['sender'];
     }
