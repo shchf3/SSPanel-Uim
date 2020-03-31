@@ -54,6 +54,7 @@ class VueController extends BaseController
             $login_token = '';
             $login_number = '';
         }
+        $themes = Tools::getDir(BASE_PATH . '/resources/views');
 
         $res['globalConfig'] = array(
             'geetest_html'            => $GtSdk,
@@ -75,8 +76,14 @@ class VueController extends BaseController
             'enable_telegram'         => $_ENV['enable_telegram'],
             'enable_mylivechat'       => $_ENV['enable_mylivechat'],
             'enable_flag'             => $_ENV['enable_flag'],
+            'enable_ticket'           => $_ENV['enable_ticket'],
             'payment_type'            => $_ENV['payment_system'],
             'mylivechat_id'           => $_ENV['mylivechat_id'],
+            'enable_kill'             => $_ENV['enable_kill'],
+            'subscribeLog'            => $_ENV['subscribeLog'],
+            'subscribeLog_show'       => $_ENV['subscribeLog_show'],
+            'themes'                  => $themes,
+            'use_new_telegram_bot'    => $_ENV['use_new_telegram_bot']
         );
 
         $res['ret'] = 1;
@@ -128,29 +135,45 @@ class VueController extends BaseController
         }
         $Ann = Ann::orderBy('date', 'desc')->first();
         $display_ios_class = $_ENV['display_ios_class'];
-        $ios_account = $_ENV['ios_account'];
-        $ios_password = $_ENV['ios_password'];
+        $display_ios_topup = $_ENV['display_ios_topup'];
+        $ios_account = null;
+        $ios_password = null;
+        if ($user->class >= $display_ios_class && $user->get_top_up() >= $display_ios_topup || $user->is_admin) {
+            $ios_account = $_ENV['ios_account'];
+            $ios_password = $_ENV['ios_password'];
+            $show_ios_account = true;
+        }
         $mergeSub = $_ENV['mergeSub'];
         $subUrl = $_ENV['subUrl'];
         $baseUrl = $_ENV['baseUrl'];
         $user['online_ip_count'] = $user->online_ip_count();
         $bind_token = TelegramSessionManager::add_bind_session($this->user);
+        $subInfo = LinkController::getSubinfo($this->user, 0);
+        $url_subinfo = array();
+        foreach ($subInfo as $key => $value) {
+            $url_subinfo[$key] = urlencode($value);
+        }
 
         $res['info'] = array(
             'user' => $user,
             'ssrSubToken' => $ssr_sub_token,
             'displayIosClass' => $display_ios_class,
+            'display_ios_topup' => $display_ios_topup,
+            'show_ios_account' => $show_ios_account,
             'iosAccount' => $ios_account,
             'iosPassword' => $ios_password,
             'mergeSub' => $mergeSub,
             'subUrl' => $subUrl,
+            'subInfo' => $subInfo,
+            'url_subinfo' => $url_subinfo,
             'baseUrl' => $baseUrl,
             'can_backtoadmin' => $can_backtoadmin,
             'ann' => $Ann,
             'recaptchaSitekey' => $recaptcha_sitekey,
             'GtSdk' => $GtSdk,
             'GaUrl' => $user->getGAurl(),
-            'bind_token' => $bind_token
+            'bind_token' => $bind_token,
+            'gravatar' => $user->gravatar
         );
 
         $res['ret'] = 1;
@@ -192,7 +215,7 @@ class VueController extends BaseController
         $paybacks->setPath('/#/user/panel');
         foreach ($paybacks as $payback)
         {
-            $payback['user_name'] = $payback->user()->user_name;
+            $payback['user_name'] = $payback->user() != null ? $payback->user()->user_name : '已注销';
         };
 
         $res['inviteInfo'] = array(
@@ -482,12 +505,13 @@ class VueController extends BaseController
         $relay_rule_id = $request->getQueryParam('relay_rule');
         $node = Node::find($id);
 
+
         if ($node == null) {
             return $response->withJson([null]);
         }
 
-        $ssr_item = URL::getItem($user, $node, $mu, $relay_rule_id, 0);
-        $ss_item = URL::getItem($user, $node, $mu, $relay_rule_id, 1);
+        $ssr_item = $node->getItem($user, $mu, $relay_rule_id, 0);
+        $ss_item = $node->getItem($user, $mu, $relay_rule_id, 1);
 
         switch ($node->sort) {
             case 0:
@@ -509,11 +533,13 @@ class VueController extends BaseController
 
                     if (URL::SSRCanConnect($user, $mu)) {
                         $res['ssrlink'] = URL::getItemUrl($ssr_item, 0);
+                        $res['ssritem'] = $ssr_item;
                     }
 
                     if (URL::SSCanConnect($user, $mu)) {
                         $res['sslink'] = URL::getItemUrl($ss_item, 1);
                         $res['ssQrWin'] = URL::getItemUrl($ss_item, 2);
+                        $res['ss_item'] = $ss_item;
                     }
 
                     return $response->withJson($res);
@@ -586,14 +612,50 @@ class VueController extends BaseController
 
                     if (URL::SSRCanConnect($user, $mu)) {
                         $res['ssrlink'] = URL::getItemUrl($ssr_item, 0);
+                        $res['ssritem'] = $ssr_item;
                     }
 
                     if (URL::SSCanConnect($user, $mu)) {
                         $res['sslink'] = URL::getItemUrl($ss_item, 1);
                         $res['ssQrWin'] = URL::getItemUrl($ss_item, 2);
+                        $res['ss_item'] = $ss_item;
                     }
 
                     return $response->withJson($res);
+                }
+                break;
+            case 11:
+                if ((($user->class >= $node->node_class
+                        && ($user->node_group == $node->node_group || $node->node_group == 0)) || $user->is_admin)
+                    && ($node->node_bandwidth_limit == 0 || $node->node_bandwidth < $node->node_bandwidth_limit)) {
+
+                        $res = [
+                            'ret' => 1,
+                            'nodeInfo' => [
+                                'node' => URL::getV2Url($user, $node, true),
+                                'user' => $user,
+                            ],
+                            'vmessUrl' => URL::getV2Url($user, $node, false)
+                        ];
+
+                        return $response->withJson($res);
+                }
+                break;
+            case 12:
+                if ((($user->class >= $node->node_class
+                        && ($user->node_group == $node->node_group || $node->node_group == 0)) || $user->is_admin)
+                    && ($node->node_bandwidth_limit == 0 || $node->node_bandwidth < $node->node_bandwidth_limit)) {
+
+                        $res = [
+                            'ret' => 1,
+                            'nodeInfo' => [
+                                'node' => URL::getV2Url($user, $node, true),
+                                'user' => $user,
+                            ],
+                            'vmessUrl' => URL::getV2Url($user, $node, false)
+                        ];
+
+                        return $response->withJson($res);
                 }
                 break;
             case 13:
@@ -614,11 +676,13 @@ class VueController extends BaseController
 
                     if (URL::SSRCanConnect($user, $mu)) {
                         $res['ssrlink'] = URL::getItemUrl($ssr_item, 0);
+                        $res['ssritem'] = $ssr_item;
                     }
 
                     if (URL::SSCanConnect($user, $mu)) {
                         $res['sslink'] = URL::getItemUrl($ss_item, 1);
                         $res['ssQrWin'] = URL::getItemUrl($ss_item, 2);
+                        $res['ss_item'] = $ss_item;
                     }
 
                     return $response->withJson($res);
@@ -633,5 +697,25 @@ class VueController extends BaseController
                 'message' => ':)',
             ],
         ]);
+    }
+
+    public function getConnectSettings($request, $response, $args)
+    {
+        $config_service = new Config();
+
+        $res['ret'] = 1;
+        $res['methods'] = $config_service->getSupportParam('methods');
+        $res['protocol'] = $config_service->getSupportParam('protocol');
+        $res['obfs'] = $config_service->getSupportParam('obfs');
+        $res['allow_none_protocol'] = $config_service->getSupportParam('allow_none_protocol');
+        $res['relay_able_protocol'] = $config_service->getSupportParam('relay_able_protocol');
+        $res['ss_aead_method'] = $config_service->getSupportParam('ss_aead_method');
+        $res['ss_obfs'] = $config_service->getSupportParam('ss_obfs');
+        $res['port_price'] = $_ENV['invite_gift'];
+        $res['port_price_specify'] = $_ENV['port_price_specify'];
+        $res['min_port'] = $_ENV['min_port'];
+        $res['max_port'] = $_ENV['max_port'];
+
+        return $response->withJson($res);
     }
 }
