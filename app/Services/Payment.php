@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Created by PhpStorm.
  * User: tonyzou
@@ -9,7 +10,16 @@
 namespace App\Services;
 
 use App\Services\Gateway\{
-    AopF2F, Codepay, DoiAMPay, PaymentWall, ChenPay, SPay, TrimePay, PAYJS, BitPayX,TomatoPay,IDtPay
+    AopF2F,
+    Codepay,
+    PaymentWall,
+    ChenPay,
+    SPay,
+    PAYJS,
+    YftPay,
+    BitPayX,
+    TomatoPay,
+    IDtPay
 };
 
 class Payment
@@ -20,8 +30,6 @@ class Payment
         switch ($method) {
             case ('codepay'):
                 return new Codepay();
-            case ('doiampay'):
-                return new DoiAMPay();
             case ('paymentwall'):
                 return new PaymentWall();
             case ('spay'):
@@ -30,12 +38,12 @@ class Payment
                 return new AopF2F();
             case ('chenAlipay'):
                 return new ChenPay();
-            case ('trimepay'):
-                return new TrimePay(Config::get('trimepay_secret'));
-            case ('bitpayx'):
-                return new BitPayX(Config::get('bitpay_secret'));
             case ('payjs'):
                 return new PAYJS(Config::get('payjs_key'));
+            case ('yftpay'):
+                return new YftPay();
+            case ('bitpayx'):
+                return new BitPayX(Config::get('bitpay_secret'));
             case ("tomatopay"):
                 return new TomatoPay();
             case ("idtpay"):
