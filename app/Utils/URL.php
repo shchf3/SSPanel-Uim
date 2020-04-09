@@ -571,6 +571,11 @@ class URL
             $return_array['address'] = $node->server;
             $return_array['tunnel_server'] = $node->tunnel_server;
             $return_array['port'] = $user->port;
+            if(!empty($node->tunnel_server)){
+                $tunnel = explode(":", $node->tunnel_server);
+                $return_array['address'] = $tunnel[0];
+                $return_array['port'] = $tunnel[1];
+            }
             $return_array['protocol'] = $user->protocol;
             $return_array['protocol_param'] = $user->protocol_param;
             $return_array['obfs'] = $user->obfs;
